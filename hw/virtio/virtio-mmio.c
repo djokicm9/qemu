@@ -31,7 +31,7 @@
 #include "system/kvm.h"
 #include "system/replay.h"
 #include "hw/virtio/virtio-mmio.h"
-#include "exec/address-spaces.h"
+#include "system/address-spaces.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
 #include "trace.h"
