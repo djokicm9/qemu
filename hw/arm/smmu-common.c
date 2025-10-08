@@ -847,6 +847,7 @@ SMMUPciBus *smmu_find_smmu_pcibus(SMMUState *s, uint8_t bus_num)
     return NULL;
 }
 
+
 void smmu_init_sdev(SMMUState *s, SMMUDevice *sdev, PCIBus *bus, int devfn)
 {
     static unsigned int index;
@@ -891,9 +892,51 @@ static AddressSpace *smmu_find_add_as(PCIBus *bus, void *opaque, int devfn)
     return &sdev->as;
 }
 
+static AddressSpace *bus_smmu_find_add_as(BusState *bus, void *opaque, int devid)
+{
+    // SMMUState *s = opaque;
+    // SMMUPciBus *sbus = g_hash_table_lookup(s->smmu_pcibus_by_busptr, bus);
+    // SMMUDevice *sdev;
+    // static unsigned int index;
+
+    // if (!sbus) {
+    //     sbus = g_malloc0(sizeof(SMMUPciBus) +
+    //                      sizeof(SMMUDevice *) * SMMU_PCI_DEVFN_MAX);
+    //     sbus->bus = bus;
+    //     g_hash_table_insert(s->smmu_pcibus_by_busptr, bus, sbus);
+    // }
+
+    // sdev = sbus->pbdev[devfn];
+    // if (!sdev) {
+    //     char *name = g_strdup_printf("%s-%d-%d", s->mrtypename, devfn, index++);
+
+    //     sdev = sbus->pbdev[devfn] = g_new0(SMMUDevice, 1);
+
+    //     sdev->smmu = s;
+    //     sdev->bus = bus;
+    //     sdev->devfn = devfn;
+
+    //     memory_region_init_iommu(&sdev->iommu, sizeof(sdev->iommu),
+    //                              s->mrtypename,
+    //                              OBJECT(s), name, UINT64_MAX);
+    //     address_space_init(&sdev->as,
+    //                        MEMORY_REGION(&sdev->iommu), name);
+    //     trace_smmu_add_mr(name);
+    //     g_free(name);
+    // }
+
+    // return &sdev->as;
+    return NULL;
+}
+
 static const PCIIOMMUOps smmu_ops = {
     .get_address_space = smmu_find_add_as,
 };
+
+static const BusIOMMUOps bus_smmu_ops = {
+    .get_address_space = bus_smmu_find_add_as,
+};
+
 
 SMMUDevice *smmu_find_sdev(SMMUState *s, uint32_t sid)
 {
@@ -935,6 +978,7 @@ static void smmu_base_realize(DeviceState *dev, Error **errp)
     SMMUState *s = ARM_SMMU(dev);
     SMMUBaseClass *sbc = ARM_SMMU_GET_CLASS(dev);
     PCIBus *pci_bus = s->primary_bus;
+    BusState *generic_bus = s->generic_bus;
     Error *local_err = NULL;
 
     sbc->parent_realize(dev, &local_err);
@@ -947,7 +991,10 @@ static void smmu_base_realize(DeviceState *dev, Error **errp)
                                      g_free, g_free);
     s->smmu_pcibus_by_busptr = g_hash_table_new(NULL, NULL);
 
-    if (!pci_bus) {
+    if (generic_bus) {
+        bus_setup_iommu(s->generic_bus, s->generic_bus_iommu_id, &bus_smmu_ops, s);
+        return;
+    } else if (!pci_bus) {
         error_setg(errp, "SMMU is not attached to any PCI bus!");
         return;
     }
@@ -1016,6 +1063,9 @@ static const Property smmu_dev_properties[] = {
                      TYPE_MEMORY_REGION, MemoryRegion *),
     DEFINE_PROP_LINK("secure-memory", SMMUState, secure_memory,
                      TYPE_MEMORY_REGION, MemoryRegion *),
+    DEFINE_PROP_LINK("generic-bus", SMMUState, generic_bus,
+                     TYPE_BUS, BusState *),
+    DEFINE_PROP_UINT8("generic-bus-iommu-id", SMMUState, generic_bus_iommu_id, 255u),
 };
 
 static void smmu_base_class_init(ObjectClass *klass, const void *data)
